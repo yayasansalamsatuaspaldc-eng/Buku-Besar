@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Akuntansi YASSA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* CSS Khusus Print (Laporan ISAK & Buku Besar) Sesuai Desain Baku YASSA */
+        @media print {
+            @page { size: portrait; margin: 15mm 10mm; } 
+            
+            /* RESET LAYOUT AGAR COCOK UNTUK KERTAS (TIDAK TERPOTONG) */
+            body, html, .flex.h-screen, main.flex-1 { 
+                height: auto !important; 
+                overflow: visible !important; 
+                display: block !important; 
+                background: white !important;
+            }
+            
+            /* Sembunyikan Elemen UI Web */
+            #sidebar, #sidebar-backdrop, header, #login-view, .no-print, #loader { display: none !important; }
+            .tab-content.hidden { display: none !important; }
+            
+            /* Tampilkan Tab Aktif Penuh 100% Lebar Kertas */
+            .tab-content:not(.hidden) { 
+                display: block !important; 
+                position: static !important; 
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            
+            .print-only { display: block !important; }
+            
+            /* Matikan Shadow & Rounded Corner yang bikin border hilang */
+            .rounded-xl, .rounded-lg, .shadow-sm, .border, .bg-white {
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .overflow-x-auto, .overflow-hidden { overflow: visible !important; }
+            
+            /* Desain Kop Surat Baku YASSA */
+            .kop-surat-container { 
+                display: flex; align-items: center; border-bottom: 5px double black; 
+                padding-bottom: 12px; margin-bottom: 20px; 
+            }
+            .kop-logo { width: 110px; flex-shrink: 0; }
+            .kop-teks { flex-grow: 1; text-align: center; color: black; padding-right: 40px; } 
+            .kop-teks h1 { 
+                font-size: 24pt; font-weight: 900; margin: 0 0 5px 0; 
+                font-family: 'Arial Black', Impact, sans-serif; letter-spacing: 1px; 
+            }
+            .kop-teks p { 
+                font-size: 10pt; margin: 2px 0; font-family: 'Arial', sans-serif; line-height: 1.3; 
+            }
+            
+            /* Desain Tabel Buku Besar & ISAK */
+            table { 
+                width: 100% !important; border-collapse: collapse; font-size: 10pt; 
+                table-layout: fixed; font-family: Arial, sans-serif; color: black !important; 
+                border: 1px solid black !important;
+            } 
+            table, th, td { border: 1px solid black !important; }
+            th { 
+                background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                text-transform: uppercase; text-align: center !important; vertical-align: middle !important; 
+                padding: 8px 4px !important; font-weight: bold !important; 
+            }
+            td { 
+                padding: 6px 4px !important; vertical-align: middle !important; 
+                word-break: normal !important; white-space: normal; 
+            } 
+
+            /* Proporsi Lebar Kolom Khusus Tabel Buku Besar agar PAS A4 (Total 100%) */
+            #data-view table th:nth-child(1) { width: 5%; }
+            #data-view table th:nth-child(2) { width: 13%; }
+            #data-view table th:nth-child(3), #data-view table td:nth-child(3) { width: 14%; text-align: center !important; } /* Tipe di-center */
+            #data-view table th:nth-child(4) { width: 22%; }
+            #data-view table th:nth-child(5) { width: 26%; } /* Rincian Jurnal */
+            #data-view table th:nth-child(6), #data-view table td:nth-child(6) { width: 20%; text-align: right !important; } /* Debit/Kredit Dilebarkan */
+            
+            /* Penyesuaian agar teks label (Tipe) & nominal tidak bertabrakan */
+            #data-view table td:nth-child(3) span { font-size: 8.5pt !important; padding: 2px 4px !important; white-space: nowrap !important; display: inline-block; }
+            #data-view table td:nth-child(6) { white-space: nowrap !important; font-size: 9.5pt !important; }
+            
+            /* Background baris Total */
+            tr.bg-gray-100, tr.bg-gray-100 td { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            
+            /* Menyusun rincian jurnal agar lurus ke kanan saat diprint */
+            .rincian-item { display: flex; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px dashed #ccc; padding-bottom: 2px; }
+            .rincian-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 relative">
+
+    <!-- ================== LOGIN VIEW ================== -->
+    <div id="login-view" class="fixed inset-0 z-50 bg-slate-900 flex items-start pt-12 md:items-center justify-center hidden overflow-y-auto pb-10">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md mx-4 text-center mt-6 md:mt-0">
+            <div class="w-28 h-28 mx-auto mb-4">
+                <!-- Logo YASSA -->
+                <svg width="100%" height="100%" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="48" fill="#111827"/>
+                    <circle cx="30" cy="38" r="4.5" fill="#4ade80"/>
+                    <path d="M 15 55 Q 30 38 45 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                    <circle cx="70" cy="38" r="4.5" fill="#4ade80"/>
+                    <path d="M 55 55 Q 70 38 85 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                    <circle cx="50" cy="28" r="5.5" fill="#4ade80"/>
+                    <path d="M 33 48 Q 50 25 67 48" fill="none" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+                    <text x="50" y="72" font-family="'Arial Black', Impact, sans-serif" font-size="22" font-weight="900" text-anchor="middle" letter-spacing="1">
+                        <tspan fill="white">YA</tspan><tspan fill="#4ade80">SSA</tspan>
+                    </text>
+                    <text x="50" y="83" font-family="Arial, sans-serif" font-size="4.5" fill="white" text-anchor="middle" font-weight="bold" letter-spacing="0.5">YAYASAN SALAM SATU ASPAL</text>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold mb-6">Sistem Akuntansi YASSA</h2>
+            <form onsubmit="handleLoginClick(event)">
+                <input type="text" id="login-username" required placeholder="Username" class="w-full mb-4 border rounded-lg p-3 focus:ring-emerald-500">
+                <input type="password" id="login-password" required placeholder="Password" class="w-full mb-6 border rounded-lg p-3 focus:ring-emerald-500">
+                <button type="submit" id="btn-login" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg">Masuk</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MAIN APP WRAPPER ================= -->
+    <div class="flex h-screen overflow-hidden relative w-full">
+        
+        <!-- MOBILE BACKDROP -->
+        <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-900/50 z-30 hidden md:hidden transition-opacity" onclick="toggleSidebar()"></div>
+
+        <!-- SIDEBAR -->
+        <aside class="absolute inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white flex flex-col no-print transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 shadow-2xl md:shadow-none" id="sidebar">
+            <div class="p-5 border-b border-slate-700 font-bold text-lg flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 mr-2">
+                        <svg viewBox="0 0 100 100" class="w-full h-full">
+                            <circle cx="50" cy="50" r="48" fill="#111827"/>
+                            <circle cx="30" cy="38" r="4.5" fill="#4ade80"/>
+                            <path d="M 15 55 Q 30 38 45 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                            <circle cx="70" cy="38" r="4.5" fill="#4ade80"/>
+                            <path d="M 55 55 Q 70 38 85 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                            <circle cx="50" cy="28" r="5.5" fill="#4ade80"/>
+                            <path d="M 33 48 Q 50 25 67 48" fill="none" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+                            <text x="50" y="76" font-family="'Arial Black', Impact, sans-serif" font-size="24" font-weight="900" text-anchor="middle" letter-spacing="1">
+                                <tspan fill="white">YA</tspan><tspan fill="#4ade80">SSA</tspan>
+                            </text>
+                        </svg>
+                    </div>
+                    AKUNTANSI
+                </div>
+                <!-- Tombol tutup khusus HP -->
+                <button class="md:hidden text-gray-400 hover:text-white" onclick="toggleSidebar()"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-3 px-4 py-3 bg-emerald-600 rounded-lg">
+                    <i class="fas fa-chart-pie w-5"></i> Dashboard
+                </button>
+                <button onclick="switchTab('input')" id="nav-input" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-lg transition">
+                    <i class="fas fa-pen-nib w-5"></i> Input Jurnal
+                </button>
+                <button onclick="switchTab('data')" id="nav-data" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-lg transition">
+                    <i class="fas fa-book w-5"></i> Buku Besar
+                </button>
+                <button onclick="switchTab('laporan')" id="nav-laporan" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-lg transition">
+                    <i class="fas fa-file-invoice-dollar w-5"></i> Laporan ISAK 35
+                </button>
+                <button onclick="switchTab('aset')" id="nav-aset" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-lg transition">
+                    <i class="fas fa-boxes w-5"></i> Aset & Lokasi
+                </button>
+            </nav>
+            <div class="p-4 border-t border-slate-700">
+                <button onclick="handleLogout()" class="w-full bg-red-600 hover:bg-red-700 py-2 rounded text-sm transition">Keluar</button>
+            </div>
+        </aside>
+
+        <!-- CONTENT AREA -->
+        <main class="flex-1 flex flex-col h-screen overflow-y-auto bg-gray-100 relative w-full">
+            
+            <!-- Mobile Header (Hamburger Menu) -->
+            <header class="bg-white shadow-sm p-4 flex items-center justify-between md:hidden no-print z-10 w-full sticky top-0">
+                <div class="font-bold text-lg flex items-center">
+                    <!-- Mengganti ikon font-awesome dengan Logo SVG YASSA -->
+                    <div class="w-8 h-8 mr-2">
+                        <svg viewBox="0 0 100 100" class="w-full h-full">
+                            <circle cx="50" cy="50" r="48" fill="#111827"/>
+                            <circle cx="30" cy="38" r="4.5" fill="#4ade80"/>
+                            <path d="M 15 55 Q 30 38 45 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                            <circle cx="70" cy="38" r="4.5" fill="#4ade80"/>
+                            <path d="M 55 55 Q 70 38 85 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                            <circle cx="50" cy="28" r="5.5" fill="#4ade80"/>
+                            <path d="M 33 48 Q 50 25 67 48" fill="none" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+                            <text x="50" y="76" font-family="'Arial Black', Impact, sans-serif" font-size="24" font-weight="900" text-anchor="middle" letter-spacing="1">
+                                <tspan fill="white">YA</tspan><tspan fill="#4ade80">SSA</tspan>
+                            </text>
+                        </svg>
+                    </div>
+                    YASSA
+                </div>
+                <button onclick="toggleSidebar()" class="text-gray-600 p-2"><i class="fas fa-bars text-2xl"></i></button>
+            </header>
+
+            <div class="p-4 md:p-6 flex-1 relative w-full">
+                <!-- Loader -->
+                <div id="loader" class="hidden absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+                </div>
+
+                <!-- ================= 1. DASHBOARD ================= -->
+                <div id="dashboard-view" class="tab-content block">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Ikhtisar Akuntansi</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8" id="dash-cards">
+                        <!-- Diisi via JS -->
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Container Grafik / Chart -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-bold text-gray-700 mb-4">Arus Kas (Tahun Ini)</h3>
+                            <div class="relative w-full h-72">
+                                <canvas id="cashflowChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Riwayat Terakhir -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <h3 class="font-bold text-gray-700 mb-4">Riwayat Terakhir</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-gray-50 text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="p-3">Tanggal</th>
+                                            <th class="p-3">Kegiatan</th>
+                                            <th class="p-3">Tipe</th>
+                                            <th class="p-3 text-right">Nominal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recent-tbody">
+                                        <!-- Diisi via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 2. INPUT JURNAL ================= -->
+                <div id="input-view" class="tab-content hidden max-w-3xl mx-auto w-full">
+                    <div class="bg-white p-4 md:p-8 rounded-xl shadow-sm border border-gray-100 w-full">
+                        <h2 class="text-xl font-bold mb-6 border-b pb-3 text-gray-800"><i class="fas fa-pen-nib text-emerald-600 mr-2"></i> Input Transaksi (Jurnal)</h2>
+                        
+                        <form id="form-input" onsubmit="submitTransaction(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1">Tanggal</label>
+                                    <input type="date" id="inp-date" required class="w-full border-gray-300 p-2.5 rounded-lg focus:ring-emerald-500 border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1">Tipe Transaksi</label>
+                                    <select id="inp-type" onchange="handleTypeChange()" class="w-full border-gray-300 p-2.5 rounded-lg focus:ring-emerald-500 border bg-gray-50 font-bold text-emerald-800">
+                                        <option value="Penerimaan">Penerimaan Dana</option>
+                                        <option value="Pengeluaran">Pengeluaran Dana</option>
+                                        <option value="Mutasi">Mutasi Kas (Pindah Buku)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Area Double Entry -->
+                            <div class="bg-slate-50 p-5 rounded-lg border border-slate-200 mb-5">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1 block" id="label-sumber">Sumber Dana (Kredit)</label>
+                                        <select id="inp-sumber" required onchange="updateKetSuggestions()" class="w-full border-gray-300 p-2 rounded focus:ring-emerald-500 border"></select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1 block" id="label-tujuan">Disimpan Ke (Debit)</label>
+                                        <select id="inp-tujuan" required onchange="updateKegiatanSuggestions(); updateKetSuggestions()" class="w-full border-gray-300 p-2 rounded focus:ring-emerald-500 border"></select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-5">
+                                <label class="block text-xs font-bold uppercase text-gray-500 mb-1 block">Nominal (Rp)</label>
+                                <input type="number" id="inp-nominal" required min="1" placeholder="Masukkan angka tanpa titik" class="w-full border-gray-300 p-3 rounded-lg text-lg font-bold text-emerald-700 border focus:ring-emerald-500">
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-gray-500 mb-1 block">Nama Kegiatan</label>
+                                    <select id="inp-kegiatan-select" required onchange="handleKegiatanSelect()" class="w-full border-gray-300 p-2.5 rounded-lg border focus:ring-emerald-500">
+                                        <!-- Diisi otomatis berdasarkan pilihan akun debit -->
+                                    </select>
+                                    <input type="text" id="inp-kegiatan" placeholder="Ketik nama kegiatan manual..." class="w-full border-gray-300 p-2.5 rounded-lg border focus:ring-emerald-500 hidden mt-2">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-gray-500 mb-1 block">Keterangan / Tujuan / Donatur</label>
+                                    <select id="inp-ket-select" onchange="handleKetSelect()" class="w-full border-gray-300 p-2.5 rounded-lg border focus:ring-emerald-500 hidden mb-2">
+                                        <!-- Diisi otomatis untuk akun tertentu -->
+                                    </select>
+                                    <input type="text" id="inp-ket" placeholder="Cth: Nama penerima atau nama toko" class="w-full border-gray-300 p-2.5 rounded-lg border focus:ring-emerald-500">
+                                </div>
+                            </div>
+
+                            <!-- ===== KAMERA WEB (WebRTC) - INPUT JURNAL ===== -->
+                            <!-- Area Bukti Dokumen (Optimasi Galeri) -->
+                            <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-white shadow-sm">
+                                <label class="block text-sm font-bold text-gray-700 mb-3">Bukti Dokumen <span class="font-normal text-xs text-gray-400">(Opsional)</span></label>
+                                
+                                <input type="file" id="inp-file" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 cursor-pointer focus:outline-none">
+                                
+                                <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                    <p class="text-[10px] text-red-600 font-bold leading-tight">
+                                        <i class="fas fa-exclamation-circle mr-1"></i> PENTING UNTUK HP REDMI / RAM KECIL:<br>
+                                        <span class="font-normal text-gray-600">Selalu pilih opsi <b>"File"</b> atau <b>"Galeri"</b>. Jangan memilih opsi "Kamera" secara langsung dari sini untuk menghindari aplikasi tertutup otomatis (Force Close).</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button type="submit" id="btn-save-tx" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-bold shadow transition">
+                                <i class="fas fa-save mr-2"></i> Simpan Jurnal
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ================= 3. BUKU BESAR ================= -->
+                <div id="data-view" class="tab-content hidden flex-col h-full w-full">
+                    <!-- Area Kop Surat -->
+                    <div class="print-only">
+                        <div class="kop-surat-container">
+                            <div class="kop-logo">
+                                <svg width="110" height="110" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="48" fill="#111827"/>
+                                    <circle cx="30" cy="38" r="4.5" fill="#4ade80"/>
+                                    <path d="M 15 55 Q 30 38 45 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                                    <circle cx="70" cy="38" r="4.5" fill="#4ade80"/>
+                                    <path d="M 55 55 Q 70 38 85 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                                    <circle cx="50" cy="28" r="5.5" fill="#4ade80"/>
+                                    <path d="M 33 48 Q 50 25 67 48" fill="none" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+                                    <text x="50" y="72" font-family="'Arial Black', Impact, sans-serif" font-size="22" font-weight="900" text-anchor="middle" letter-spacing="1">
+                                        <tspan fill="white">YA</tspan><tspan fill="#4ade80">SSA</tspan>
+                                    </text>
+                                    <text x="50" y="83" font-family="Arial, sans-serif" font-size="4.5" fill="white" text-anchor="middle" font-weight="bold" letter-spacing="0.5">YAYASAN SALAM SATU ASPAL</text>
+                                </svg>
+                            </div>
+                            <div class="kop-teks">
+                                <h1>YAYASAN SALAM SATU ASPAL</h1>
+                                <p>Akte Notaris Nomor 5 Tgl 02 Agustus 2022 Notaris Jose Dima Satria SH.M.KN.SK.MENKUMHAM Nomor AHU-0024199.AH.01.12.Tahun 2022</p>
+                                <p>NPWP No.61.030.342.2-416.000</p>
+                                <p>Jalan H. Mean Raya No. 72 RT 001 RW 002 Kelurahan Karang Timur Kecamatan Karang Tengah Kota Tanggerang</p>
+                                <p>Provinsi Banten 15157 081385009062</p>
+                            </div>
+                        </div>
+                        <div class="judul-laporan text-center font-bold text-lg mb-4 underline">LAPORAN BUKU BESAR</div>
+                    </div>
+
+                    <!-- Area Filter dan Tombol Cetak -->
+                    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 no-print gap-4 w-full">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full md:w-auto">
+                            <h2 class="text-2xl font-bold text-gray-800 whitespace-nowrap">Buku Besar</h2>
+                            
+                            <select id="filter-tipe-buku" onchange="renderBukuBesar()" class="border border-gray-300 rounded-lg p-2 text-sm focus:ring-emerald-500 bg-white shadow-sm font-medium w-full sm:w-auto">
+                                <option value="Semua">Semua Tipe</option>
+                                <option value="Penerimaan">Penerimaan</option>
+                                <option value="Pengeluaran">Pengeluaran</option>
+                                <option value="Mutasi">Mutasi</option>
+                            </select>
+
+                            <select id="filter-tahun-buku" onchange="renderBukuBesar()" class="border border-gray-300 rounded-lg p-2 text-sm focus:ring-emerald-500 bg-white shadow-sm font-medium w-full sm:w-auto">
+                                <option value="Semua">Semua Tahun</option>
+                            </select>
+                            
+                            <div class="relative w-full sm:w-44">
+                                <button type="button" onclick="toggleDropdown('dropdown-bulan-buku', event)" class="border border-gray-300 rounded-lg p-2 text-sm focus:ring-emerald-500 bg-white shadow-sm font-medium flex justify-between items-center w-full">
+                                    <span id="label-bulan-buku" class="truncate pr-2">Semua Bulan</span>
+                                    <i class="fas fa-chevron-down text-gray-400"></i>
+                                </button>
+                                <div id="dropdown-bulan-buku" onclick="event.stopPropagation()" class="hidden absolute z-50 w-full sm:w-56 bg-white border border-gray-300 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto text-sm left-0">
+                                    <div class="p-2 border-b bg-gray-50 sticky top-0 z-10">
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" id="cb-semua-buku" checked onchange="toggleAllBulan('buku')" class="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"> 
+                                            <span class="font-bold">Pilih Semua Bulan</span>
+                                        </label>
+                                    </div>
+                                    <div class="p-2 space-y-2" id="list-bulan-buku">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                            <button onclick="cetakPDF()" class="bg-slate-800 text-white px-4 py-2 rounded-lg shadow flex items-center justify-center gap-2 hover:bg-slate-900 w-full md:w-auto">
+        <i class="fas fa-print"></i> Cetak PDF
+    </button>
+                        </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex-1 w-full print:border-none print:shadow-none print:rounded-none">
+                        <div class="overflow-x-auto h-full print:overflow-visible w-full">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-100 text-gray-700 uppercase border-b">
+                                    <tr>
+                                        <th class="p-3 text-center">No</th>
+                                        <th class="p-3 text-center">Tanggal</th>
+                                        <th class="p-3 text-center">Tipe</th>
+                                        <th class="p-3">Kegiatan</th>
+                                        <th class="p-3">Rincian Jurnal Akuntansi</th>
+                                        <th class="p-3 text-right">Debit / Kredit</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-tbody" class="divide-y divide-gray-200">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 4. LAPORAN ISAK 35 ================= -->
+                <div id="laporan-view" class="tab-content hidden max-w-4xl mx-auto w-full pb-10">
+                    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 no-print gap-4 w-full">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full md:w-auto">
+                            <h2 class="text-2xl font-bold text-gray-800 whitespace-nowrap">Laporan ISAK 35</h2>
+                            
+                            <select id="filter-tahun-lap" onchange="renderLaporan()" class="border border-gray-300 rounded-lg p-2 text-sm focus:ring-emerald-500 bg-white shadow-sm font-medium w-full sm:w-auto">
+                                <option value="Semua">Semua Tahun</option>
+                            </select>
+
+                            <div class="relative w-full sm:w-44">
+                                <button type="button" onclick="toggleDropdown('dropdown-bulan-lap', event)" class="border border-gray-300 rounded-lg p-2 text-sm focus:ring-emerald-500 bg-white shadow-sm font-medium flex justify-between items-center w-full">
+                                    <span id="label-bulan-lap" class="truncate pr-2">Semua Bulan</span>
+                                    <i class="fas fa-chevron-down text-gray-400"></i>
+                                </button>
+                                <div id="dropdown-bulan-lap" onclick="event.stopPropagation()" class="hidden absolute z-50 w-full sm:w-56 bg-white border border-gray-300 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto text-sm left-0">
+                                    <div class="p-2 border-b bg-gray-50 sticky top-0 z-10">
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" id="cb-semua-lap" checked onchange="toggleAllBulan('lap')" class="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"> 
+                                            <span class="font-bold">Pilih Semua Bulan</span>
+                                        </label>
+                                    </div>
+                                    <div class="p-2 space-y-2" id="list-bulan-lap">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="cetakPDF()" class="bg-slate-800 text-white px-4 py-2 rounded-lg shadow flex items-center justify-center gap-2 hover:bg-slate-900 w-full md:w-auto">
+        <i class="fas fa-print"></i> Cetak Laporan
+    </button>
+                    </div>
+
+                    <!-- Area Print Laporan -->
+                    <div class="bg-white p-4 md:p-8 rounded-xl shadow-sm border print:border-none print:shadow-none print:p-0 w-full">
+                        <!-- Kop Surat Laporan -->
+                        <div class="print-only">
+                            <div class="kop-surat-container">
+                                <div class="kop-logo">
+                                    <svg width="110" height="110" viewBox="0 0 100 100">
+                                        <circle cx="50" cy="50" r="48" fill="#111827"/>
+                                        <circle cx="30" cy="38" r="4.5" fill="#4ade80"/>
+                                        <path d="M 15 55 Q 30 38 45 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                                        <circle cx="70" cy="38" r="4.5" fill="#4ade80"/>
+                                        <path d="M 55 55 Q 70 38 85 55" fill="none" stroke="#4ade80" stroke-width="4.5" stroke-linecap="round"/>
+                                        <circle cx="50" cy="28" r="5.5" fill="#4ade80"/>
+                                        <path d="M 33 48 Q 50 25 67 48" fill="none" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+                                        <text x="50" y="72" font-family="'Arial Black', Impact, sans-serif" font-size="22" font-weight="900" text-anchor="middle" letter-spacing="1">
+                                            <tspan fill="white">YA</tspan><tspan fill="#4ade80">SSA</tspan>
+                                        </text>
+                                        <text x="50" y="83" font-family="Arial, sans-serif" font-size="4.5" fill="white" text-anchor="middle" font-weight="bold" letter-spacing="0.5">YAYASAN SALAM SATU ASPAL</text>
+                                    </svg>
+                                </div>
+                                <div class="kop-teks">
+                                    <h1>YAYASAN SALAM SATU ASPAL</h1>
+                                    <p>Akte Notaris Nomor 5 Tgl 02 Agustus 2022 Notaris Jose Dima Satria SH.M.KN.SK.MENKUMHAM Nomor AHU-0024199.AH.01.12.Tahun 2022</p>
+                                    <p>NPWP No.61.030.342.2-416.000</p>
+                                    <p>Jalan H. Mean Raya No. 72 RT 001 RW 002 Kelurahan Karang Timur Kecamatan Karang Tengah Kota Tanggerang</p>
+                                    <p>Provinsi Banten 15157 081385009062</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h3 class="text-lg font-bold text-center underline mb-1">LAPORAN AKTIVITAS (LABA/RUGI)</h3>
+                        <p class="text-center text-sm font-bold text-gray-600 mb-4" id="periode-laporan-teks">PERIODE: KESELURUHAN</p>
+                        
+                        <div class="overflow-x-auto w-full">
+                            <table class="w-full mb-10 text-sm border-collapse border border-gray-300">
+                                <thead>
+                                    <tr class="bg-gray-200">
+                                        <th class="p-3 border border-gray-300 text-left w-3/4">DESKRIPSI AKUN</th>
+                                        <th class="p-3 border border-gray-300 text-right w-1/4">JUMLAH (Rp)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tb-aktivitas">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h3 class="text-lg font-bold text-center underline mb-1" style="page-break-before: always;">LAPORAN POSISI KEUANGAN (NERACA)</h3>
+                        <p class="text-center text-sm font-bold text-gray-600 mb-4" id="periode-neraca-teks">PER: KESELURUHAN</p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4 text-sm w-full">
+                            <div class="overflow-x-auto">
+                                <table class="w-full border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-blue-100">
+                                            <th class="p-2 text-center border border-gray-300" colspan="2">ASET</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-aset">
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="w-full border-collapse border border-gray-300 mb-4">
+                                    <thead>
+                                        <tr class="bg-red-100">
+                                            <th class="p-2 text-center border border-gray-300" colspan="2">KEWAJIBAN</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-kewajiban">
+                                    </tbody>
+                                </table>
+                                
+                                <table class="w-full border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr class="bg-orange-100">
+                                            <th class="p-2 text-center border border-gray-300" colspan="2">ASET NETO (EKUITAS)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-ekuitas">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 5. MANAJEMEN ASET ================= -->
+                <div id="aset-view" class="tab-content hidden flex-col h-full w-full">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 no-print gap-4">
+                        <h2 class="text-2xl font-bold text-gray-800">Manajemen Aset & Lokasi</h2>
+                        <button onclick="openAddAssetModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 w-full sm:w-auto justify-center">
+                            <i class="fas fa-plus"></i> Tambah Aset
+                        </button>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex-1 w-full">
+                        <div class="overflow-x-auto h-full w-full">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-100 text-gray-700 uppercase border-b">
+                                    <tr>
+                                        <th class="p-3 text-center">No</th>
+                                        <th class="p-3 text-center">Tgl Beli</th>
+                                        <th class="p-3">Nama Aset</th>
+                                        <th class="p-3">Kategori</th>
+                                        <th class="p-3">Lokasi</th>
+                                        <th class="p-3 text-center">Kondisi</th>
+                                        <th class="p-3 text-right">Nilai (Rp)</th>
+                                        <th class="p-3 text-center no-print">Aksi Dokumen</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="asset-tbody" class="divide-y divide-gray-200">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- ================= MODAL TAMBAH ASET ================= -->
+    <div id="add-asset-modal" class="fixed inset-0 z-50 bg-slate-900/75 flex items-center justify-center p-4 hidden">
+        <div class="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl max-h-screen overflow-y-auto">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-xl font-bold text-gray-800">Catat Aset Baru</h3>
+                <button onclick="closeAddAssetModal()" class="text-gray-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            
+            <form id="form-add-asset" onsubmit="submitAddAsset(event)">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-bold mb-1">Tanggal Beli</label>
+                        <input type="date" id="aset-date" required class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold mb-1">Kategori</label>
+                        <select id="aset-kategori" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                            <option value="Kendaraan">Kendaraan</option>
+                            <option value="Elektronik">Elektronik</option>
+                            <option value="Furnitur">Furnitur</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-xs font-bold mb-1">Nama Aset / Barang</label>
+                    <input type="text" id="aset-nama" required placeholder="Contoh: Laptop Asus" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-xs font-bold mb-1">Sumber Dana (Kredit)</label>
+                    <select id="aset-sumber-dana" required class="w-full border border-emerald-300 bg-emerald-50 rounded-lg p-2 focus:ring-emerald-500 text-emerald-800">
+                    </select>
+                    <p class="text-[10px] text-gray-500 mt-1">Saldo akan otomatis dikurangi sebagai Jurnal Pengeluaran.</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-xs font-bold mb-1">Lokasi Aset</label>
+                    <input type="text" id="aset-lokasi" required placeholder="Contoh: Kantor Pusat, Gudang, dll" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-bold mb-1">Nilai (Rp)</label>
+                        <input type="number" id="aset-nilai" required placeholder="Nominal" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold mb-1">Kondisi</label>
+                        <select id="aset-kondisi" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                            <option value="Baik">Baik</option>
+                            <option value="Rusak">Rusak</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- ===== KAMERA WEB (WebRTC) - FORM ASET ===== -->
+                <!-- Area Foto Aset (Optimasi Galeri) -->
+                <div class="mb-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                    <label class="block text-xs font-bold mb-2">Foto Aset <span class="font-normal text-gray-400">(Pilih dari Galeri)</span></label>
+                    <input type="file" id="aset-photo" accept="image/*" class="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 border-0 focus:outline-none">
+                    <p class="text-[10px] text-red-500 mt-1 font-medium"><i class="fas fa-info-circle"></i> Gunakan opsi <b>Galeri</b> untuk mencegah Force Close.</p>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-xs font-bold mb-1">Keterangan Tambahan</label>
+                    <input type="text" id="aset-ket" placeholder="Plat nomor, spesifikasi..." class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500">
+                </div>
+                
+                <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                    <button type="button" onclick="closeAddAssetModal()" class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition">Batal</button>
+                    <button type="submit" id="btn-save-asset" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow transition">
+                        <i class="fas fa-save mr-2"></i> Simpan Aset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= CUSTOM ALERT MODAL ================= -->
+    <div id="custom-alert" class="fixed inset-0 z-[60] bg-slate-900/50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 transform scale-95 transition-transform duration-300" id="custom-alert-box">
+            <div class="p-6 text-center">
+                <div id="custom-alert-icon" class="mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4">
+                    <!-- Icon disisipkan via JS -->
+                </div>
+                <h3 class="text-lg leading-6 font-bold text-gray-900 mb-2" id="custom-alert-title">Notifikasi</h3>
+                <div class="mt-2">
+                    <p class="text-sm text-gray-500" id="custom-alert-message"></p>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 rounded-b-xl sm:px-6 flex justify-center">
+                <button type="button" onclick="closeCustomAlert()" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 bg-emerald-600 text-base font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 sm:w-auto sm:text-sm transition">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= JAVASCRIPT LOGIC ================= -->
+    <script>
+        // =================================================================
+        // KONFIGURASI KONEKSI KE BACKEND (GOOGLE APPS SCRIPT WEB APP)
+        // =================================================================
+        // 1. Buka project Code.gs di script.google.com
+        // 2. Deploy > New deployment > Web app > Execute as: Me > Who has access: Anyone
+        // 3. Copy URL yang diakhiri "/exec" dan tempel di bawah ini
+        const SCRIPT_URL = 'PASTE_URL_WEBAPP_ANDA_DISINI';
+
+        // Helper terpusat untuk memanggil backend GAS via HTTP (pengganti google.script.run)
+        // Content-Type text/plain dipakai supaya browser tidak mengirim preflight OPTIONS
+        // (Apps Script Web App tidak menangani preflight CORS dengan baik).
+        async function callAPI(action, params = {}) {
+            if (!SCRIPT_URL || SCRIPT_URL.indexOf('PASTE_URL') !== -1) {
+                throw new Error('SCRIPT_URL belum diisi. Deploy Code.gs sebagai Web App dan isi URL-nya di index.html.');
+            }
+            const res = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, ...params })
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status + ' dari server.');
+            return res.json();
+        }
+
+        // State Variables
+        let G_COA = [], G_RIWAYAT = [], G_LAPORAN = null, assetData = [];
+        let isSaving = false;
+        let cashflowChartInstance = null;
+
+        // Utilities
+        const formatRp = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0);
+        const formatTgl = (d) => d ? new Date(d).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) : '-';
+
+        // --- FUNGSI KOMPRESI GAMBAR ---
+        const compressImage = (file, maxWidth, maxHeight, quality, callback) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) { height = Math.round(height *= maxWidth / width); width = maxWidth; }
+                    } else {
+                        if (height > maxHeight) { width = Math.round(width *= maxHeight / height); height = maxHeight; }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    const base64Data = dataUrl.split(',')[1];
+                    callback(base64Data, 'image/jpeg');
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // --- FUNGSI CUSTOM ALERT ---
+        const showCustomAlert = (message, type = 'info') => {
+            const modal = document.getElementById('custom-alert');
+            const box = document.getElementById('custom-alert-box');
+            const msgEl = document.getElementById('custom-alert-message');
+            const titleEl = document.getElementById('custom-alert-title');
+            const iconEl = document.getElementById('custom-alert-icon');
+
+            msgEl.innerText = message;
+
+            if (type === 'success') {
+                titleEl.innerText = 'Berhasil!';
+                titleEl.className = 'text-lg leading-6 font-bold text-emerald-600 mb-2';
+                iconEl.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 mb-4';
+                iconEl.innerHTML = '<i class="fas fa-check text-xl text-emerald-600"></i>';
+            } else if (type === 'error') {
+                titleEl.innerText = 'Terjadi Kesalahan';
+                titleEl.className = 'text-lg leading-6 font-bold text-red-600 mb-2';
+                iconEl.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4';
+                iconEl.innerHTML = '<i class="fas fa-exclamation-triangle text-xl text-red-600"></i>';
+            } else {
+                titleEl.innerText = 'Informasi';
+                titleEl.className = 'text-lg leading-6 font-bold text-blue-600 mb-2';
+                iconEl.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4';
+                iconEl.innerHTML = '<i class="fas fa-info text-xl text-blue-600"></i>';
+            }
+
+            modal.classList.remove('hidden');
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            box.classList.remove('scale-95');
+        };
+
+        const closeCustomAlert = () => {
+            const modal = document.getElementById('custom-alert');
+            const box = document.getElementById('custom-alert-box');
+            modal.classList.add('opacity-0');
+            box.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        };
+
+        window.addEventListener('click', () => { 
+            const d1 = document.getElementById('dropdown-bulan-buku');
+            const d2 = document.getElementById('dropdown-bulan-lap');
+            if(d1 && !d1.classList.contains('hidden')) d1.classList.add('hidden');
+            if(d2 && !d2.classList.contains('hidden')) d2.classList.add('hidden');
+        });
+
+        const toggleSidebar = () => { 
+            document.getElementById('sidebar').classList.toggle('-translate-x-full'); 
+            document.getElementById('sidebar-backdrop').classList.toggle('hidden');
+        };
+
+        const toggleDropdown = (id, e) => { 
+            e.stopPropagation(); 
+            document.getElementById(id).classList.toggle('hidden'); 
+        };
+
+        const toggleAllBulan = (type) => {
+            const checked = document.getElementById(`cb-semua-${type}`).checked;
+            document.querySelectorAll(`.cb-bulan-${type}`).forEach(cb => cb.checked = checked);
+            updateBulanLabel(type);
+            if(type === 'buku') renderBukuBesar();
+            if(type === 'lap') renderLaporan();
+        };
+
+        const updateBulanLabel = (type) => {
+            const chk = document.querySelectorAll(`.cb-bulan-${type}:checked`);
+            const lbl = document.getElementById(`label-bulan-${type}`);
+            if (chk.length === 12) lbl.innerText = "Semua Bulan";
+            else if (chk.length === 0) lbl.innerText = "Pilih Bulan";
+            else if (chk.length === 1) lbl.innerText = chk[0].nextElementSibling.innerText;
+            else lbl.innerText = `${chk.length} Bulan`;
+        };
+
+        const updateBulanSelection = (type) => {
+            const checkboxes = document.querySelectorAll(`.cb-bulan-${type}`);
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            document.getElementById(`cb-semua-${type}`).checked = allChecked;
+            updateBulanLabel(type);
+            if (type === 'buku') renderBukuBesar();
+            if (type === 'lap') renderLaporan();
+        };
+
+        // --- FUNGSI DRAFT LOCALSTORAGE ---
+        const saveDraftInput = () => {
+            try {
+                const draft = {
+                    date: document.getElementById('inp-date').value,
+                    type: document.getElementById('inp-type').value,
+                    sumber: document.getElementById('inp-sumber').value,
+                    tujuan: document.getElementById('inp-tujuan').value,
+                    nominal: document.getElementById('inp-nominal').value,
+                    kegiatanSelect: document.getElementById('inp-kegiatan-select').value,
+                    kegiatanManual: document.getElementById('inp-kegiatan').value,
+                    ketSelect: document.getElementById('inp-ket-select').value,
+                    ketManual: document.getElementById('inp-ket').value
+                };
+                localStorage.setItem('draftJurnal_YASSA', JSON.stringify(draft));
+            } catch (e) { console.error("Gagal menyimpan draft:", e.message); }
+        };
+
+        const loadDraftInput = () => {
+            try {
+                const draftStr = localStorage.getItem('draftJurnal_YASSA');
+                if (draftStr) {
+                    const draft = JSON.parse(draftStr);
+                    if (draft.date) document.getElementById('inp-date').value = draft.date;
+                    if (draft.nominal) document.getElementById('inp-nominal').value = draft.nominal;
+                    if (draft.type) { document.getElementById('inp-type').value = draft.type; handleTypeChange(); }
+                    if (draft.sumber) document.getElementById('inp-sumber').value = draft.sumber;
+                    if (draft.tujuan) document.getElementById('inp-tujuan').value = draft.tujuan;
+                    updateKegiatanSuggestions(); updateKetSuggestions();
+                    if (draft.kegiatanSelect) {
+                        document.getElementById('inp-kegiatan-select').value = draft.kegiatanSelect; handleKegiatanSelect();
+                        if (draft.kegiatanSelect === 'LAINNYA' && draft.kegiatanManual) document.getElementById('inp-kegiatan').value = draft.kegiatanManual;
+                    }
+                    if (draft.ketSelect) {
+                        document.getElementById('inp-ket-select').value = draft.ketSelect; handleKetSelect();
+                        if (draft.ketSelect === 'LAINNYA' && draft.ketManual) document.getElementById('inp-ket').value = draft.ketManual;
+                    } else {
+                         if (draft.ketManual) document.getElementById('inp-ket').value = draft.ketManual;
+                    }
+                }
+                const inputIds = ['inp-date', 'inp-type', 'inp-sumber', 'inp-tujuan', 'inp-nominal', 'inp-kegiatan-select', 'inp-kegiatan', 'inp-ket-select', 'inp-ket'];
+                inputIds.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) { el.addEventListener('input', saveDraftInput); el.addEventListener('change', saveDraftInput); }
+                });
+            } catch (e) { console.error("Gagal memuat draft:", e.message); }
+        };
+
+        const switchTab = (name) => {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`${name}-view`).classList.remove('hidden');
+            
+            document.querySelectorAll('nav button').forEach(el => {
+                el.classList.remove('bg-emerald-600'); el.classList.add('hover:bg-slate-800');
+            });
+            const activeBtn = document.getElementById(`nav-${name}`);
+            if (activeBtn) { activeBtn.classList.remove('hover:bg-slate-800'); activeBtn.classList.add('bg-emerald-600'); }
+            
+            if(window.innerWidth < 768) {
+                document.getElementById('sidebar').classList.add('-translate-x-full');
+                document.getElementById('sidebar-backdrop')?.classList.add('hidden');
+            }
+            
+            if(name === 'dashboard') initData();
+            if(name === 'data') renderBukuBesar();
+            if(name === 'laporan') renderLaporan();
+            if(name === 'input') loadDraftInput();
+            
+            // Matikan stream jika pindah tab agar tidak boros baterai HP
+            if (typeof hentikanKamera === 'function') {
+                hentikanKamera('jurnal');
+                hentikanKamera('aset');
+            }
+        };
+
+        const handleLoginClick = (e) => {
+            e.preventDefault();
+            const u = document.getElementById('login-username').value;
+            const p = document.getElementById('login-password').value;
+            const btn = document.getElementById('btn-login');
+            
+            btn.disabled = true; btn.innerHTML = 'Memeriksa...';
+
+            callAPI('verifyLogin', { username: u, password: p })
+                .then(res => {
+                    if(res.success) {
+                        sessionStorage.setItem('token', res.token);
+                        document.getElementById('login-view').classList.add('hidden');
+                        initData();
+                    } else {
+                        btn.disabled = false; btn.innerHTML = 'Masuk';
+                        showCustomAlert(res.error, 'error');
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false; btn.innerHTML = 'Masuk';
+                    showCustomAlert(err.message || 'Terjadi kesalahan pada server.', 'error');
+                });
+        };
+
+        const handleLogout = () => { 
+            const token = sessionStorage.getItem('token');
+            callAPI('logoutServer', { token }).catch(() => {}); 
+            
+            // 1. Bersihkan memori cache / token sesi
+            sessionStorage.clear(); 
+            
+            // 2. Munculkan kembali menu Login ke depan layar
+            document.getElementById('login-view').classList.remove('hidden');
+            
+            // 3. Kosongkan isian username dan password bekas sebelumnya
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+            
+            // 4. Tutup menu samping (sidebar) jika di-klik dari HP
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+            if (document.getElementById('sidebar-backdrop')) {
+                document.getElementById('sidebar-backdrop').classList.add('hidden');
+            }
+            
+            // 5. Kembalikan posisi ke tab Dashboard untuk login berikutnya
+            switchTab('dashboard');
+        };
+
+        const initData = () => {
+            const token = sessionStorage.getItem('token');
+            if(!token) { document.getElementById('login-view').classList.remove('hidden'); return; }
+            document.getElementById('loader').style.display = 'flex';
+            
+            callAPI('getAppInitialData', { token })
+                .then(res => {
+                    if(res.unauthorized) return handleLogout();
+                    G_COA = res.coa; G_LAPORAN = res.laporan; G_RIWAYAT = res.riwayat;
+
+                    return callAPI('getAssets', { token })
+                        .then(resAset => {
+                            assetData = resAset;
+                            document.getElementById('loader').style.display = 'none';
+                            populateFilters(); renderAll();
+                        })
+                        .catch(err => {
+                            document.getElementById('loader').style.display = 'none';
+                            showCustomAlert("Gagal memuat data aset: " + err.message, 'error');
+                        });
+                })
+                .catch(err => {
+                    document.getElementById('loader').style.display = 'none';
+                    showCustomAlert("Gagal memuat data akuntansi: " + err.message, 'error');
+                });
+        };
+
+        const populateFilters = () => {
+            const listBuku = document.getElementById('list-bulan-buku');
+            const listLap = document.getElementById('list-bulan-lap');
+            
+            if(listBuku && listBuku.children.length === 0) {
+                const bulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+                let htmlBuku = '', htmlLap = '';
+                
+                bulan.forEach((b, i) => {
+                    const val = (i+1).toString().padStart(2,'0');
+                    htmlBuku += `<label class="flex items-center gap-2 cursor-pointer mb-2"><input type="checkbox" value="${val}" class="cb-bulan-buku" checked onchange="updateBulanSelection('buku')"> <span>${b}</span></label>`;
+                    htmlLap += `<label class="flex items-center gap-2 cursor-pointer mb-2"><input type="checkbox" value="${val}" class="cb-bulan-lap" checked onchange="updateBulanSelection('lap')"> <span>${b}</span></label>`;
+                });
+                
+                if(listBuku) listBuku.innerHTML = htmlBuku;
+                if(listLap) listLap.innerHTML = htmlLap;
+            }
+            
+            const tahun = [...new Set(G_RIWAYAT.map(tx => tx.date ? tx.date.split('-')[0] : ''))].filter(x => x).sort().reverse();
+            let opt = '<option value="Semua">Semua Tahun</option>';
+            tahun.forEach(t => opt += `<option value="${t}">${t}</option>`);
+            
+            const f1 = document.getElementById('filter-tahun-buku');
+            const f2 = document.getElementById('filter-tahun-lap');
+            
+            if(f1 && f1.options.length <= 1) f1.innerHTML = opt;
+            if(f2 && f2.options.length <= 1) f2.innerHTML = opt;
+            
+            updateBulanLabel('buku'); updateBulanLabel('lap');
+        };
+
+        const renderChart = () => {
+            const ctx = document.getElementById('cashflowChart');
+            if (!ctx) return;
+            const currentYear = new Date().getFullYear().toString();
+            const txThisYear = G_RIWAYAT.filter(tx => tx.date && tx.date.startsWith(currentYear));
+
+            const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
+            const monthlyData = {};
+            months.forEach(m => monthlyData[m] = { income: 0, expense: 0 });
+
+            txThisYear.forEach(tx => {
+                const dateObj = new Date(tx.date);
+                const monthName = months[dateObj.getMonth()];
+                if(tx.type === 'Penerimaan') monthlyData[monthName].income += tx.totalAmount;
+                else if (tx.type === 'Pengeluaran') monthlyData[monthName].expense += tx.totalAmount;
+            });
+
+            const incomeData = months.map(m => monthlyData[m].income);
+            const expenseData = months.map(m => monthlyData[m].expense);
+
+            if (cashflowChartInstance) cashflowChartInstance.destroy();
+
+            cashflowChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [
+                        { label: 'Penerimaan', data: incomeData, backgroundColor: '#10b981', borderRadius: 4 },
+                        { label: 'Pengeluaran', data: expenseData, backgroundColor: '#ef4444', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { callback: function(value) {
+                            if (value >= 1000000) return 'Rp ' + (value / 1000000) + ' Jt';
+                            if (value >= 1000) return 'Rp ' + (value / 1000) + ' Rb';
+                            return 'Rp ' + value;
+                        } } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { callbacks: { label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) label += ': ';
+                            if (context.parsed.y !== null) label += new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(context.parsed.y);
+                            return label;
+                        } } }
+                    }
+                }
+            });
+        };
+
+        const renderAll = () => {
+            const cards = document.getElementById('dash-cards');
+            let kasBank = G_COA.filter(c => c.kode.startsWith('10')).reduce((acc, c) => acc + c.saldo, 0);
+            
+            if(cards && G_LAPORAN) {
+                cards.innerHTML = `
+                    <div class="bg-white p-5 rounded-xl border-l-4 border-emerald-500 shadow-sm"><p class="text-xs text-gray-500 uppercase font-bold mb-1">Total Kas & Digital</p><b class="text-xl md:text-2xl">${formatRp(kasBank)}</b></div>
+                    <div class="bg-white p-5 rounded-xl border-l-4 border-blue-500 shadow-sm"><p class="text-xs text-gray-500 uppercase font-bold mb-1">Pendapatan</p><b class="text-xl md:text-2xl">${formatRp(G_LAPORAN.totPendapatan)}</b></div>
+                    <div class="bg-white p-5 rounded-xl border-l-4 border-orange-500 shadow-sm"><p class="text-xs text-gray-500 uppercase font-bold mb-1">Total Beban</p><b class="text-xl md:text-2xl">${formatRp(G_LAPORAN.totBeban)}</b></div>
+                    <div class="bg-white p-5 rounded-xl border-l-4 border-purple-500 shadow-sm"><p class="text-xs text-gray-500 uppercase font-bold mb-1">Surplus Bersih</p><b class="text-xl md:text-2xl">${formatRp(G_LAPORAN.surplusDefisit)}</b></div>
+                `;
+            }
+
+            const tbRecent = document.getElementById('recent-tbody');
+            if(tbRecent) {
+                tbRecent.innerHTML = '';
+                G_RIWAYAT.slice(0,5).forEach(tx => {
+                    let c = tx.type === 'Penerimaan' ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
+                    tbRecent.innerHTML += `<tr class="border-b"><td class="p-3 whitespace-nowrap">${formatTgl(tx.date)}</td><td class="p-3 font-medium">${tx.activity}</td><td class="p-3"><span class="px-2 py-1 rounded text-[10px] font-bold ${c}">${tx.type}</span></td><td class="p-3 text-right font-bold">${formatRp(tx.totalAmount)}</td></tr>`;
+                });
+            }
+
+            renderChart(); handleTypeChange(); populateAsetSumberDana(); renderBukuBesar(); renderLaporan(); renderAssetTable();
+        };
+
+        const SUGGESTIONS_MAP = {
+            "1100": ["Uang Muka Kegiatan Yayasan", "Pinjaman Kasbon Pengurus", "Uang Muka Sewa/Pembelian"],
+            "4001": ["Penerimaan Donasi Umum", "Kotak Amal Berbagi", "Sponsorship / Mitra Khusus"],
+            "4002": ["Penerimaan Program SAPA", "Donasi Orang Tua Asuh Baru"],
+            "4003": ["Donasi Keadaan Darurat", "Sumbangan Insidental / Bencana"],
+            "4004": ["Zakat Fitrah", "Zakat Mal", "Fidyah"],
+            "4005": ["Donasi Khusus Disabilitas", "Penerimaan Program PEDAS"],
+            "5001": ["Santunan Anak Yatim", "Paket Sembako Masyarakat", "Bantuan Kesehatan/Obat", "Beasiswa Pendidikan", "Bantuan Musibah/Bencana"],
+            "5002": ["Penyaluran Program SAPA", "Bantuan Orang Tua Asuh"],
+            "5003": ["Bantuan Pendidikan BADIK", "Pembelian Alat Tulis & Seragam"],
+            "5004": ["Bantuan Sosial BASO", "Pembagian Sembako Dhuafa"],
+            "5005": ["Bantuan Kesehatan (BATAN)", "Biaya Berobat Anak Yatim", "Bantuan Tebus Obat"],
+            "5006": ["Penyaluran Program PEDAS", "Alat Bantu Khusus Disabilitas"],
+            "5101": ["Pembayaran Listrik & Air", "Internet / WiFi Kantor", "Pembelian ATK (Kertas/Tinta)", "Kebersihan & Keamanan Kantor", "Sewa / Perawatan Kantor"],
+            "5102": ["Gaji Bulanan Staf", "Honor Relawan Kegiatan", "Uang Makan / Lembur Pengurus", "Transport / Bensin Dinas"],
+            "5103": ["Jenguk Pengurus Sakit", "Dana Takziah / Uang Duka", "Syukuran / Konsumsi Internal", "Iuran Kesehatan / BPJS"]
+        };
+
+        const updateKegiatanSuggestions = () => {
+            try {
+                const debitAccount = document.getElementById('inp-tujuan').value, srcAccount = document.getElementById('inp-sumber')?.value;
+                const sel = document.getElementById('inp-kegiatan-select'), inp = document.getElementById('inp-kegiatan');
+                if(!sel || !inp) return;
+                sel.innerHTML = '<option value="" disabled selected>-- Pilih Nama Kegiatan --</option>';
+                const matchedKey = SUGGESTIONS_MAP[debitAccount] ? debitAccount : (SUGGESTIONS_MAP[srcAccount] ? srcAccount : null);
+                if (matchedKey) { SUGGESTIONS_MAP[matchedKey].forEach(s => { sel.innerHTML += `<option value="${s}">${s}</option>`; }); }
+                sel.innerHTML += `<option value="LAINNYA">Lainnya (Ketik Manual)...</option>`;
+                inp.classList.add('hidden'); inp.required = false; inp.value = '';
+            } catch (e) {}
+        };
+
+        const updateKetSuggestions = () => {
+            try {
+                updateKegiatanSuggestions(); 
+                const srcAccount = document.getElementById('inp-sumber')?.value, sel = document.getElementById('inp-ket-select'), inp = document.getElementById('inp-ket');
+                if(!sel || !inp) return;
+                let suggestions = [];
+                if (srcAccount === '4003') { suggestions = ["YGMP (PT. GoTo Gojek)", "PT. Sari Roti", "Hamba Allah"]; } 
+                else if (srcAccount === '4001') { suggestions = ["Hamba Allah", "QRIS Yayasan", "Donasi Kitabisa", "Donatur Tetap", "Warga Sekitar", "Kotak Amal GOPAY"]; } 
+                else if (srcAccount === '4002') { suggestions = ["Muzakki Tetap", "Hamba Allah", "QRIS Yayasan", "Donasi Kitabisa"]; }
+                
+                if (suggestions.length > 0) {
+                    sel.innerHTML = '<option value="" disabled selected>-- Pilih Donatur / Keterangan --</option>';
+                    suggestions.forEach(s => { sel.innerHTML += `<option value="${s}">${s}</option>`; });
+                    sel.innerHTML += `<option value="LAINNYA">Lainnya (Ketik Manual)...</option>`;
+                    sel.classList.remove('hidden'); inp.classList.add('hidden'); inp.value = '';
+                } else {
+                    sel.innerHTML = ''; sel.classList.add('hidden'); inp.classList.remove('hidden');
+                }
+            } catch (e) {}
+        };
+
+        const handleKegiatanSelect = () => {
+            const sel = document.getElementById('inp-kegiatan-select'), inp = document.getElementById('inp-kegiatan');
+            if (sel.value === 'LAINNYA') { inp.classList.remove('hidden'); inp.required = true; inp.focus(); } else { inp.classList.add('hidden'); inp.required = false; }
+        };
+
+        const handleKetSelect = () => {
+            const sel = document.getElementById('inp-ket-select'), inp = document.getElementById('inp-ket');
+            if (sel.value === 'LAINNYA') { inp.classList.remove('hidden'); inp.focus(); } else { inp.classList.add('hidden'); }
+        };
+
+        const handleTypeChange = () => {
+            const type = document.getElementById('inp-type').value, src = document.getElementById('inp-sumber'), dest = document.getElementById('inp-tujuan');
+            if(!src || !dest) return;
+            src.innerHTML = ''; dest.innerHTML = '';
+            let listSrc = [], listDest = [];
+            
+            if (type === 'Penerimaan') {
+                listSrc = G_COA.filter(c => c.kategori === 'Pendapatan' || c.kategori === 'Kewajiban');
+                listDest = G_COA.filter(c => c.kode.startsWith('10'));
+            } else if (type === 'Pengeluaran') {
+                listSrc = G_COA.filter(c => c.kode.startsWith('10'));
+                listDest = G_COA.filter(c => c.kategori === 'Beban' || (c.kategori === 'Aset' && !c.kode.startsWith('10')));
+            } else {
+                listSrc = G_COA.filter(c => c.kode.startsWith('10'));
+                listDest = G_COA.filter(c => c.kode.startsWith('10'));
+            }
+            
+            listSrc.forEach(c => src.innerHTML += `<option value="${c.kode}">${c.kode} - ${c.nama}</option>`);
+            listDest.forEach(c => dest.innerHTML += `<option value="${c.kode}">${c.kode} - ${c.nama}</option>`);
+            updateKegiatanSuggestions(); updateKetSuggestions(); 
+        };
+
+        const populateAsetSumberDana = () => {
+            const sel = document.getElementById('aset-sumber-dana');
+            if(!sel) return;
+            sel.innerHTML = '';
+            G_COA.filter(c => c.kode.startsWith('10')).forEach(c => sel.innerHTML += `<option value="${c.kode}">${c.kode} - ${c.nama}</option>`);
+        };
+
+        const submitTransaction = (e) => {
+            e.preventDefault();
+            if(isSaving) return;
+            isSaving = true;
+            
+            const btn = document.getElementById('btn-save-tx');
+            const ori = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Menyimpan...';
+            
+            let activityVal = document.getElementById('inp-kegiatan-select').value;
+            if (activityVal === 'LAINNYA') activityVal = document.getElementById('inp-kegiatan').value;
+            
+            let descVal = document.getElementById('inp-ket').value;
+            const selKet = document.getElementById('inp-ket-select');
+            if (!selKet.classList.contains('hidden') && selKet.value && selKet.value !== 'LAINNYA') descVal = selKet.value;
+            
+            const payload = {
+                date: document.getElementById('inp-date').value, 
+                type: document.getElementById('inp-type').value,
+                fromAccount: document.getElementById('inp-sumber').value, 
+                toAccount: document.getElementById('inp-tujuan').value,
+                amount: document.getElementById('inp-nominal').value, 
+                activity: activityVal,
+                desc: descVal, 
+                photos: []
+            };
+
+            const fileInput = document.getElementById('inp-file');
+            const file = fileInput ? fileInput.files[0] : null;
+            if(file) {
+                // Kompresi aktif untuk meringankan beban upload
+                compressImage(file, 800, 800, 0.7, (compressedBase64, mimeType) => {
+                    payload.photos = [{ base64: compressedBase64, mimeType: mimeType }];
+                    sendTx(payload, btn, ori); 
+                });
+            } else { 
+                sendTx(payload, btn, ori);
+            }
+        };
+
+        const sendTx = (payload, btn, ori) => {
+            callAPI('addTransaction', { payload, token: sessionStorage.getItem('token') })
+                .then(res => {
+                    isSaving = false; btn.disabled = false; btn.innerHTML = ori;
+                    if(res.success) {
+                        showCustomAlert("Transaksi Berhasil Disimpan!", 'success');
+                        document.getElementById('form-input').reset();
+                        setFotoMode('jurnal', 'upload');
+                        localStorage.removeItem('draftJurnal_YASSA');
+                        initData();
+                    } else { showCustomAlert(res.error, 'error'); }
+                })
+                .catch(err => {
+                    isSaving = false; btn.disabled = false; btn.innerHTML = ori;
+                    showCustomAlert("Gagal menyimpan: " + err.message, 'error');
+                });
+        };
+
+        const renderBukuBesar = () => {
+            const tb = document.getElementById('history-tbody');
+            if(!tb) return;
+            const thn = document.getElementById('filter-tahun-buku').value;
+            const tipe = document.getElementById('filter-tipe-buku') ? document.getElementById('filter-tipe-buku').value : 'Semua';
+            const blnNodes = document.querySelectorAll('.cb-bulan-buku:checked');
+            const bln = Array.from(blnNodes).map(cb => cb.value);
+            
+            tb.innerHTML = '';
+            let filtered = G_RIWAYAT.filter(tx => {
+                if(!tx.date) return false;
+                const txY = tx.date.split('-')[0], txM = tx.date.split('-')[1];
+                return (thn === 'Semua' || txY === thn) && bln.includes(txM) && (tipe === 'Semua' || tx.type === tipe);
+            });
+
+            let totalSaldo = 0;
+            filtered.forEach((tx, i) => {
+                if(tx.type === 'Penerimaan') totalSaldo += tx.totalAmount; else if(tx.type === 'Pengeluaran') totalSaldo -= tx.totalAmount;
+                let rincian = tx.entries.map(e => `<div class="rincian-item"><span class="${e.debit > 0 ? 'font-bold' : 'ml-4 text-gray-500'}">${e.kode} - ${e.nama}</span><span class="${e.debit > 0 ? 'text-blue-600' : 'text-red-500'} font-medium">${formatRp(e.debit || e.kredit)}</span></div>`).join('');
+                let c = tx.type === 'Penerimaan' ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
+                tb.innerHTML += `<tr class="border-b hover:bg-gray-50 transition"><td class="p-3 text-center align-top">${i+1}</td><td class="p-3 text-center align-top whitespace-nowrap">${formatTgl(tx.date)}</td><td class="p-3 text-center align-top"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${c}">${tx.type}</span></td><td class="p-3 align-top"><div class="font-bold text-gray-800">${tx.activity}</div><div class="text-xs text-gray-500 mt-1">${tx.desc}</div></td><td class="p-3 align-top bg-gray-50/50 print:bg-transparent">${rincian}</td><td class="p-3 text-right align-top font-bold whitespace-nowrap">${formatRp(tx.totalAmount)}</td></tr>`;
+            });
+            const lblB = document.getElementById('label-bulan-buku').innerText.toUpperCase(), lblT = thn === 'Semua' ? '' : thn;
+            let cTot = totalSaldo >= 0 ? 'text-emerald-600' : 'text-red-600';
+            tb.innerHTML += `<tr class="bg-gray-100 font-bold border-t-2 border-gray-300"><td colspan="5" class="p-3 text-right">TOTAL MUTASI SALDO (${lblB} ${lblT})</td><td class="p-3 text-right text-lg print:text-sm ${cTot}">${formatRp(totalSaldo)}</td></tr>`;
+        };
+
+        const renderLaporan = () => {
+            const thn = document.getElementById('filter-tahun-lap')?.value || 'Semua';
+            const blnNodes = document.querySelectorAll('.cb-bulan-lap:checked');
+            const bln = Array.from(blnNodes).map(cb => cb.value);
+            const maxM = bln.length > 0 ? Math.max(...bln.map(Number)).toString().padStart(2, '0') : '00';
+
+            let rep = { aset: [], kewajiban: [], ekuitas: [], pendapatan: [], beban: [], totAset: 0, totKewajiban: 0, totEkuitasAwal: 0, totPendapatan: 0, totBeban: 0, surplusDefisit: 0, totEkuitasAkhir: 0 };
+            let coaMap = {}; G_COA.forEach(c => { coaMap[c.kode] = { ...c, saldo: 0 }; });
+
+            G_RIWAYAT.forEach(tx => {
+                if(!tx.date) return;
+                const txY = tx.date.split('-')[0], txM = tx.date.split('-')[1];
+                let isAkt = true, isNer = true;
+                if(thn !== 'Semua') {
+                    if(txY > thn) { isAkt = false; isNer = false; } 
+                    else if(txY < thn) { isAkt = false; } 
+                    else { if(bln.length < 12) { if(txM > maxM) { isAkt = false; isNer = false; } if(!bln.includes(txM)) isAkt = false; } }
+                } else { if(bln.length < 12 && !bln.includes(txM)) isAkt = false; }
+
+                tx.entries.forEach(e => {
+                    let acc = coaMap[e.kode];
+                    if(acc) {
+                        let mut = (acc.saldoNormal === 'Debit') ? (e.debit - e.kredit) : (e.kredit - e.debit);
+                        if(acc.kategori === 'Pendapatan' || acc.kategori === 'Beban') {
+                            if(isAkt) acc.saldo += mut; 
+                            else if(isNer) rep.totEkuitasAwal += (acc.kategori === 'Pendapatan' ? mut : -mut);
+                        } else { if(isNer) acc.saldo += mut; }
+                    }
+                });
+            });
+
+            Object.values(coaMap).forEach(acc => {
+                if(acc.kategori === 'Aset') { rep.aset.push(acc); rep.totAset += acc.saldo; }
+                else if(acc.kategori === 'Kewajiban') { rep.kewajiban.push(acc); rep.totKewajiban += acc.saldo; }
+                else if(acc.kategori === 'Ekuitas') { rep.ekuitas.push(acc); rep.totEkuitasAwal += acc.saldo; }
+                else if(acc.kategori === 'Pendapatan') { rep.pendapatan.push(acc); rep.totPendapatan += acc.saldo; }
+                else if(acc.kategori === 'Beban') { rep.beban.push(acc); rep.totBeban += acc.saldo; }
+            });
+            
+            rep.surplusDefisit = rep.totPendapatan - rep.totBeban; rep.totEkuitasAkhir = rep.totEkuitasAwal + rep.surplusDefisit;
+            const nBulan = {"01":"Januari","02":"Februari","03":"Maret","04":"April","05":"Mei","06":"Juni","07":"Juli","08":"Agustus","09":"September","10":"Oktober","11":"November","12":"Desember"};
+            let pAkt = "KESELURUHAN", pNer = "KESELURUHAN";
+            
+            if(thn !== 'Semua') {
+                if(bln.length === 12) { pAkt = `TAHUN ${thn}`; pNer = `S.D DESEMBER ${thn}`; } 
+                else if(bln.length > 0) { pAkt = bln.length === 1 ? `BULAN ${nBulan[bln[0]].toUpperCase()} ${thn}` : `${bln.length} BULAN TERPILIH ${thn}`; pNer = `S.D ${nBulan[maxM].toUpperCase()} ${thn}`; } 
+                else { pAkt = "TIDAK ADA BULAN"; pNer = "TIDAK ADA BULAN"; }
+            }
+            
+            document.getElementById('periode-laporan-teks').innerText = `PERIODE: ${pAkt}`;
+            document.getElementById('periode-neraca-teks').innerText = `PER: ${pNer}`;
+
+            const tbAkt = document.getElementById('tb-aktivitas');
+            if(tbAkt) {
+                tbAkt.innerHTML = `<tr><td colspan="2" class="p-3 border border-gray-300 font-bold bg-gray-100">PENDAPATAN</td></tr>`;
+                rep.pendapatan.forEach(c => { tbAkt.innerHTML += `<tr><td class="p-2 pl-6 border border-gray-300">${c.kode} - ${c.nama}</td><td class="p-2 border border-gray-300 text-right">${formatRp(c.saldo)}</td></tr>`; });
+                tbAkt.innerHTML += `<tr><td class="p-3 border border-gray-300 font-bold text-right">TOTAL PENDAPATAN</td><td class="p-3 border border-gray-300 text-right font-bold">${formatRp(rep.totPendapatan)}</td></tr>`;
+                tbAkt.innerHTML += `<tr><td colspan="2" class="p-3 border border-gray-300 font-bold bg-gray-100 mt-4">BEBAN & PENGELUARAN</td></tr>`;
+                rep.beban.forEach(c => { tbAkt.innerHTML += `<tr><td class="p-2 pl-6 border border-gray-300">${c.kode} - ${c.nama}</td><td class="p-2 border border-gray-300 text-right">${formatRp(c.saldo)}</td></tr>`; });
+                tbAkt.innerHTML += `<tr><td class="p-3 border border-gray-300 font-bold text-right">TOTAL BEBAN</td><td class="p-3 border border-gray-300 text-right font-bold">${formatRp(rep.totBeban)}</td></tr>`;
+                let cSur = rep.surplusDefisit >= 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900';
+                tbAkt.innerHTML += `<tr class="${cSur}"><td class="p-3 border border-gray-300 font-bold text-lg">SURPLUS / (DEFISIT) BERSIH</td><td class="p-3 border border-gray-300 text-right font-bold text-lg">${formatRp(rep.surplusDefisit)}</td></tr>`;
+            }
+
+            const tAs = document.getElementById('tb-aset'), tKw = document.getElementById('tb-kewajiban'), tEk = document.getElementById('tb-ekuitas');
+            if(tAs && tKw && tEk) {
+                tAs.innerHTML = ''; rep.aset.forEach(c => { tAs.innerHTML += `<tr><td class="p-2 border border-gray-300">${c.kode} - ${c.nama}</td><td class="p-2 border border-gray-300 text-right whitespace-nowrap">${formatRp(c.saldo)}</td></tr>`; });
+                tAs.innerHTML += `<tr class="bg-blue-50"><td class="p-3 border border-gray-300 font-bold">TOTAL ASET</td><td class="p-3 border border-gray-300 text-right font-bold whitespace-nowrap text-lg">${formatRp(rep.totAset)}</td></tr>`;
+                tKw.innerHTML = ''; rep.kewajiban.forEach(c => { tKw.innerHTML += `<tr><td class="p-2 border border-gray-300">${c.kode} - ${c.nama}</td><td class="p-2 border border-gray-300 text-right whitespace-nowrap">${formatRp(c.saldo)}</td></tr>`; });
+                tKw.innerHTML += `<tr class="bg-red-50"><td class="p-3 border border-gray-300 font-bold">TOTAL KEWAJIBAN</td><td class="p-3 border border-gray-300 text-right font-bold whitespace-nowrap text-lg">${formatRp(rep.totKewajiban)}</td></tr>`;
+                tEk.innerHTML = ''; rep.ekuitas.forEach(c => { tEk.innerHTML += `<tr><td class="p-2 border border-gray-300">${c.kode} - ${c.nama}</td><td class="p-2 border border-gray-300 text-right whitespace-nowrap">${formatRp(c.saldo)}</td></tr>`; });
+                if(rep.totEkuitasAwal !== 0 && rep.ekuitas.length === 0) { tEk.innerHTML += `<tr><td class="p-2 border border-gray-300">Surplus Masa Lalu</td><td class="p-2 border border-gray-300 text-right whitespace-nowrap">${formatRp(rep.totEkuitasAwal)}</td></tr>`; }
+                tEk.innerHTML += `<tr><td class="p-2 border border-gray-300 italic text-gray-600">Surplus Periode Ini</td><td class="p-2 border border-gray-300 text-right italic text-gray-600 whitespace-nowrap">${formatRp(rep.surplusDefisit)}</td></tr>`;
+                tEk.innerHTML += `<tr class="bg-orange-50"><td class="p-3 border border-gray-300 font-bold">TOTAL EKUITAS</td><td class="p-3 border border-gray-300 text-right font-bold whitespace-nowrap text-lg">${formatRp(rep.totEkuitasAkhir)}</td></tr>`;
+            }
+        };
+
+        const openAddAssetModal = () => document.getElementById('add-asset-modal').classList.remove('hidden');
+        const closeAddAssetModal = () => { 
+            document.getElementById('add-asset-modal').classList.add('hidden'); 
+            document.getElementById('form-add-asset').reset();
+            setFotoMode('aset', 'upload');
+        };
+
+        const renderAssetTable = () => {
+            const tb = document.getElementById('asset-tbody');
+            if(!tb) return;
+            tb.innerHTML = '';
+            if(!assetData || assetData.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500">Belum ada aset terdaftar.</td></tr>`; return; }
+            assetData.forEach((d, i) => {
+                let c = d.condition === 'Baik' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100';
+                tb.innerHTML += `<tr class="border-b hover:bg-gray-50 transition"><td class="p-3 text-center">${i+1}</td><td class="p-3 text-center whitespace-nowrap">${formatTgl(d.date)}</td><td class="p-3 font-bold text-gray-800">${d.name}</td><td class="p-3">${d.category}</td><td class="p-3 text-blue-600 font-medium"><i class="fas fa-map-marker-alt mr-1"></i> ${d.location}</td><td class="p-3 text-center"><span class="px-2 py-1 rounded-full text-xs font-bold ${c}">${d.condition}</span></td><td class="p-3 text-right font-bold text-gray-800 whitespace-nowrap">${formatRp(d.value)}</td><td class="p-3 text-center no-print"><div class="flex justify-center gap-2">${d.photo ? `<a href="${d.photo}" target="_blank" class="bg-blue-100 hover:bg-blue-200 text-blue-700 p-2 rounded transition" title="Lihat Foto"><i class="fas fa-image"></i></a>` : ''}${d.qrCode ? `<a href="${d.qrCode}" target="_blank" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 p-2 rounded transition" title="Cetak QR"><i class="fas fa-qrcode"></i></a>` : ''}</div></td></tr>`;
+            });
+        };
+
+        const submitAddAsset = (e) => {
+            e.preventDefault();
+            if(isSaving) return; isSaving = true;
+            const btn = document.getElementById('btn-save-asset');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Menyimpan...';
+            
+            let payload = { 
+                date: document.getElementById('aset-date').value, 
+                category: document.getElementById('aset-kategori').value, 
+                name: document.getElementById('aset-nama').value, 
+                location: document.getElementById('aset-lokasi').value, 
+                value: document.getElementById('aset-nilai').value, 
+                condition: document.getElementById('aset-kondisi').value, 
+                description: document.getElementById('aset-ket').value, 
+                photos: [] 
+            };
+
+            const fileInput = document.getElementById('aset-photo');
+            const file = fileInput ? fileInput.files[0] : null;
+            if(file) {
+                compressImage(file, 800, 800, 0.7, (compressedBase64, mimeType) => {
+                    payload.photos = [{ base64: compressedBase64, mimeType: mimeType }]; 
+                    sendAset(payload, btn); 
+                });
+            } else { 
+                sendAset(payload, btn); 
+            }
+        };
+
+        const sendAset = (payload, btn) => {
+            const token = sessionStorage.getItem('token');
+            let txPayload = { date: payload.date, type: 'Pengeluaran', fromAccount: document.getElementById('aset-sumber-dana').value, toAccount: '1500', amount: payload.value, activity: 'Pembelian Aset: ' + payload.name, desc: payload.description, photos: payload.photos };
+            callAPI('addAsset', { payload, token })
+                .then(res => {
+                    if(res.success) {
+                        return callAPI('addTransaction', { payload: txPayload, token })
+                            .then(txRes => {
+                                isSaving = false; btn.disabled = false; btn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Aset';
+                                showCustomAlert("Aset & Jurnal berhasil tersimpan!", 'success');
+                                closeAddAssetModal(); initData();
+                            })
+                            .catch(err => {
+                                isSaving = false; btn.disabled = false; btn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Aset';
+                                showCustomAlert("Gagal menyimpan jurnal aset: " + err.message, 'error');
+                            });
+                    } else {
+                        isSaving = false; btn.disabled = false; btn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Aset';
+                        showCustomAlert(res.error, 'error');
+                    }
+                })
+                .catch(err => {
+                    isSaving = false; btn.disabled = false; btn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Aset';
+                    showCustomAlert("Gagal menyimpan aset: " + err.message, 'error');
+                });
+        };
+
+        // ============================================================
+        // ===== MODUL KAMERA WEB (WebRTC) - PAMUNGKAS MIUI FIX =====
+        // ============================================================
+        
+        let streamAktif = { jurnal: null, aset: null };
+
+        const cekDukunganKamera = () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                tampilkanPanduanKamera('API kamera tidak tersedia di browser ini atau halaman tidak berjalan di HTTPS.');
+                return false;
+            }
+            if (window.self !== window.top) {
+                tampilkanPanduanKamera();
+                return false; 
+            }
+            return true;
+        };
+
+        const tampilkanPanduanKamera = (alasan) => {
+            const panelId = 'panel-panduan-kamera';
+            const panelLama = document.getElementById(panelId);
+            if (panelLama) panelLama.remove();
+
+            const panel = document.createElement('div');
+            panel.id = panelId;
+            panel.className = 'fixed inset-0 z-[70] bg-slate-900/80 flex items-end justify-center p-4';
+            panel.innerHTML = `
+                <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                    <div class="bg-amber-500 px-5 py-4 flex items-center gap-3">
+                        <i class="fas fa-exclamation-triangle text-white text-xl"></i>
+                        <span class="text-white font-bold text-base">Kamera Diblokir Google</span>
+                    </div>
+                    <div class="p-5">
+                        <p class="text-sm text-gray-600 mb-4">Izin kamera di HP Anda sudah benar, namun <b>Google Apps Script</b> mengurung aplikasi ini di dalam "bingkai keamanan" yang mematikan fitur kamera langsung.</p>
+                        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5">
+                            <p class="text-xs font-bold text-emerald-800 mb-2"><i class="fas fa-unlock-alt mr-1"></i> Solusi: Lepaskan dari Bingkai</p>
+                            <p class="text-xs text-emerald-700">Klik tombol di bawah untuk mendobrak bingkai Google dan membuka aplikasi di mode layar penuh. <i>(Anda mungkin perlu login ulang satu kali)</i>.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="document.getElementById('${panelId}').remove()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-xl text-sm transition">Batal</button>
+                            <button onclick="window.open(window.self.location.href, '_top')" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm transition"><i class="fas fa-external-link-alt mr-1"></i> Buka Akses Kamera</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(panel);
+        };
+
+        const setFotoMode = (ctx, mode) => {
+            const areaUpload = document.getElementById(`${ctx}-area-upload`);
+            const areaKamera = document.getElementById(`${ctx}-area-kamera`);
+            const btnUpload  = document.getElementById(`${ctx}-btn-upload`);
+            const btnKamera  = document.getElementById(`${ctx}-btn-kamera`);
+            
+            if (mode === 'upload') {
+                // UX CERDAS: Jika tombol 'Pilih File' diklik lagi padahal sudah aktif, langsung buka Galeri
+                if (areaUpload && !areaUpload.classList.contains('hidden')) {
+                    const fileInput = document.getElementById(ctx === 'jurnal' ? 'inp-file' : 'aset-photo');
+                    if(fileInput) fileInput.click();
+                    return;
+                }
+                
+                if (areaUpload) areaUpload.classList.remove('hidden');
+                if (areaKamera) areaKamera.classList.add('hidden');
+                if (btnKamera) btnKamera.className = btnKamera.className.replace('border-emerald-500','border-gray-300').replace('bg-emerald-50','bg-gray-50').replace('text-emerald-700','text-gray-500');
+                if (btnUpload) btnUpload.className = btnUpload.className.replace('border-gray-300','border-emerald-500').replace('bg-gray-50','bg-emerald-50').replace('text-gray-500','text-emerald-700');
+                
+                hapusFoto(ctx);
+                hentikanKamera(ctx);
+            } else {
+                if (!cekDukunganKamera()) return;
+                
+                if (areaUpload) areaUpload.classList.add('hidden');
+                if (areaKamera) areaKamera.classList.remove('hidden');
+                if (btnUpload) btnUpload.className = btnUpload.className.replace('border-emerald-500','border-gray-300').replace('bg-emerald-50','bg-gray-50').replace('text-emerald-700','text-gray-500');
+                if (btnKamera) btnKamera.className = btnKamera.className.replace('border-gray-300','border-emerald-500').replace('bg-gray-50','bg-emerald-50').replace('text-gray-500','text-emerald-700');
+                
+                document.getElementById(`${ctx}-video`).classList.remove('hidden');
+                document.getElementById(`${ctx}-canvas`).classList.add('hidden');
+                document.getElementById(`${ctx}-live-badge`).classList.remove('hidden');
+                document.getElementById(`${ctx}-retake-overlay`).classList.add('hidden');
+                document.getElementById(`${ctx}-btn-ambil`).classList.remove('hidden');
+                document.getElementById(`${ctx}-btn-ulangi`).classList.add('hidden');
+                
+                hapusFoto(ctx);
+                mulaiKamera(ctx);
+            }
+        };
+
+        const mulaiKamera = async (ctx) => {
+            try {
+                hentikanKamera(ctx);
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+                } catch (e) {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                }
+                streamAktif[ctx] = stream;
+                document.getElementById(`${ctx}-video`).srcObject = stream;
+            } catch (err) {
+                console.error('Kamera error:', err.name, err.message);
+                hentikanKamera(ctx);
+                setFotoMode(ctx, 'upload');
+                let alasan = `Terjadi kesalahan: ${err.name} — ${err.message}`;
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') alasan = 'Izin kamera ditolak oleh browser atau sistem.';
+                else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') alasan = 'Tidak ada kamera yang terdeteksi di perangkat ini.';
+                else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') alasan = 'Kamera sedang dipakai oleh aplikasi lain.';
+                tampilkanPanduanKamera(alasan);
+            }
+        };
+
+        const hentikanKamera = (ctx) => {
+            if (streamAktif[ctx]) {
+                streamAktif[ctx].getTracks().forEach(t => t.stop());
+                streamAktif[ctx] = null;
+            }
+        };
+
+        const ambilFoto = (ctx) => {
+            const video = document.getElementById(`${ctx}-video`), canvas = document.getElementById(`${ctx}-canvas`), capCvs = document.getElementById(`${ctx}-capture-canvas`);
+            if (!video.videoWidth) { showCustomAlert('Kamera belum siap. Tunggu sebentar.', 'info'); return; }
+            
+            capCvs.width = video.videoWidth; capCvs.height = video.videoHeight;
+            capCvs.getContext('2d').drawImage(video, 0, 0);
+            
+            let w = video.videoWidth, h = video.videoHeight;
+            if (w > h) { if (w > 800) { h = Math.round(h * 800 / w); w = 800; } } else { if (h > 800) { w = Math.round(w * 800 / h); h = 800; } }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(capCvs, 0, 0, w, h);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            document.getElementById(`${ctx}-foto-data`).value = dataUrl.split(',')[1];
+            document.getElementById(`${ctx}-foto-mime`).value = 'image/jpeg';
+            
+            video.classList.add('hidden'); canvas.classList.remove('hidden');
+            document.getElementById(`${ctx}-retake-overlay`).classList.remove('hidden'); document.getElementById(`${ctx}-live-badge`).classList.add('hidden');
+            document.getElementById(`${ctx}-btn-ambil`).classList.add('hidden'); document.getElementById(`${ctx}-btn-ulangi`).classList.remove('hidden');
+            hentikanKamera(ctx); 
+        };
+
+        const ulangiKamera = (ctx) => {
+            document.getElementById(`${ctx}-foto-data`).value = ''; document.getElementById(`${ctx}-foto-mime`).value = '';
+            document.getElementById(`${ctx}-video`).classList.remove('hidden'); document.getElementById(`${ctx}-canvas`).classList.add('hidden');
+            document.getElementById(`${ctx}-retake-overlay`).classList.add('hidden'); document.getElementById(`${ctx}-live-badge`).classList.remove('hidden');
+            document.getElementById(`${ctx}-btn-ambil`).classList.remove('hidden'); document.getElementById(`${ctx}-btn-ulangi`).classList.add('hidden');
+            mulaiKamera(ctx);
+        };
+
+        const hapusFoto = (ctx) => {
+            const dataInput = document.getElementById(`${ctx}-foto-data`);
+            const mimeInput = document.getElementById(`${ctx}-foto-mime`);
+            const fileInput = document.getElementById(ctx === 'jurnal' ? 'inp-file' : 'aset-photo');
+            if (dataInput) dataInput.value = '';
+            if (mimeInput) mimeInput.value = '';
+            if (fileInput) fileInput.value = '';
+        };
+
+        const prosesFileGaleri = (input, ctx) => {
+            // Karena kita menggunakan HTML input native, nama file otomatis muncul di layar.
+            // Tidak perlu tindakan tambahan karena foto akan dikompres di fungsi submit.
+        };
+
+        // Trik memanipulasi URL Iframe agar nama PDF terbaca rapi
+        const cetakPDF = () => {
+            let judulLaporan = "Laporan_YASSA";
+            
+            // Cek apakah sedang buka tab Buku Besar atau ISAK 35
+            const isBukuBesar = !document.getElementById('data-view').classList.contains('hidden');
+            
+            if (isBukuBesar) {
+                const tahun = document.getElementById('filter-tahun-buku')?.value || 'Semua_Tahun';
+                const bulan = document.getElementById('label-bulan-buku')?.innerText.replace(/ /g, '_') || 'Semua_Bulan';
+                const tipe = document.getElementById('filter-tipe-buku')?.value || 'Semua_Transaksi';
+                judulLaporan = "Buku_Besar_" + tipe + "_" + bulan + "_" + tahun;
+            } else {
+                const tahun = document.getElementById('filter-tahun-lap')?.value || 'Semua_Tahun';
+                const bulan = document.getElementById('label-bulan-lap')?.innerText.replace(/ /g, '_') || 'Semua_Bulan';
+                judulLaporan = "Laporan_ISAK35_" + bulan + "_" + tahun;
+            }
+
+            document.title = judulLaporan; // Tetap setel title untuk berjaga-jaga
+            
+            // Trik Utama: Tempelkan nama laporan ke ujung URL iframe sebelum print
+            try { 
+                history.replaceState(null, judulLaporan, '?dokumen=' + judulLaporan); 
+            } catch(e) {}
+            
+            // Mulai cetak
+            window.print();
+        };
+
+        window.onload = initData;
+    </script>
+</body>
+</html>
