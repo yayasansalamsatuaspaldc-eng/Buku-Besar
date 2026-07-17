@@ -1569,12 +1569,13 @@
             // Tidak perlu tindakan tambahan karena foto akan dikompres di fungsi submit.
         };
 
-        // Trik memanipulasi URL Iframe agar nama PDF terbaca rapi
-        const cetakPDF = () => {
+        // Trik memanipulasi URL Iframe agar nama PDF terbaca rapi dan otomatis menyimpan salinan ke Google Drive
+        const cetakPDF = async () => {
             let judulLaporan = "Laporan_YASSA";
             
             // Cek apakah sedang buka tab Buku Besar atau ISAK 35
             const isBukuBesar = !document.getElementById('data-view').classList.contains('hidden');
+            let elementToPrintId = isBukuBesar ? 'data-view' : 'laporan-view';
             
             if (isBukuBesar) {
                 const tahun = document.getElementById('filter-tahun-buku')?.value || 'Semua_Tahun';
@@ -1593,9 +1594,32 @@
             try { 
                 history.replaceState(null, judulLaporan, '?dokumen=' + judulLaporan); 
             } catch(e) {}
-            
-            // Mulai cetak
-            window.print();
+
+            // Munculkan notifikasi loading ke pengguna
+            showCustomAlert("Menyiapkan dokumen dan menyimpan rekamannya ke Google Drive... Mohon tunggu sesaat.", "info");
+
+            try {
+                // Ambil kode HTML dari tabel laporan dan ubah jadi teks rahasia (Base64) agar aman melintasi server
+                const contentHtml = document.getElementById(elementToPrintId).innerHTML;
+                const base64Html = btoa(unescape(encodeURIComponent(contentHtml)));
+                const token = sessionStorage.getItem('token');
+
+                // Kirim perintah simpan PDF ke Apps Script (Code.gs)
+                const res = await callAPI('saveReportPDF', { htmlContent: base64Html, fileName: judulLaporan, token: token });
+                
+                closeCustomAlert();
+                if(res.success) {
+                    // Setelah sukses tersimpan di Google Drive, baru buka jendela cetak bawaan
+                    setTimeout(() => { window.print(); }, 500);
+                } else {
+                    alert("Peringatan: Gagal menyimpan salinan ke Drive (" + res.error + "). Proses cetak manual tetap dilanjutkan.");
+                    setTimeout(() => { window.print(); }, 500);
+                }
+            } catch (err) {
+                closeCustomAlert();
+                alert("Ada gangguan jaringan saat mencoba menyimpan ke Drive. Proses cetak manual tetap dilanjutkan.");
+                setTimeout(() => { window.print(); }, 500);
+            }
         };
 
         window.onload = initData;
