@@ -182,7 +182,7 @@
         <main class="flex-1 flex flex-col h-screen overflow-y-auto bg-gray-100 relative w-full">
             
             <!-- Mobile Header (Hamburger Menu) -->
-            <header class="bg-white shadow-sm p-4 flex items-center justify-between md:hidden no-print z-10 w-full sticky top-0">
+            <header class="bg-white shadow-sm p-4 flex items-center justify-between md:hidden no-print z-10 w-full sticky top-0" id="mobileHeader">
                 <div class="font-bold text-lg flex items-center">
                     <!-- Mengganti ikon font-awesome dengan Logo SVG YASSA -->
                     <div class="w-8 h-8 mr-2">
@@ -673,6 +673,17 @@
     <!-- ================= JAVASCRIPT LOGIC ================= -->
     <script>
         // =================================================================
+        // MODE EMBED (dibuka lewat iframe YASSA Hub)
+        // Sebelumnya app ini SAMA SEKALI GAK BACA ?embed=1&tab=... dari Hub.
+        // =================================================================
+        const VALID_TABS = ['dashboard', 'input', 'data', 'laporan', 'aset'];
+        const EMBED_PARAMS = new URLSearchParams(window.location.search);
+        const IS_EMBEDDED = EMBED_PARAMS.get('embed') === '1';
+        const INITIAL_TAB = VALID_TABS.includes(EMBED_PARAMS.get('tab')) ? EMBED_PARAMS.get('tab') : 'dashboard';
+        // Origin YASSA Hub yang boleh ngirim perintah pindah-tab lewat postMessage.
+        const ALLOWED_HUB_ORIGINS = ['https://yayasansalamsatuaspaldc-eng.github.io'];
+
+        // =================================================================
         // KONFIGURASI KONEKSI KE BACKEND (GOOGLE APPS SCRIPT WEB APP)
         // =================================================================
         // 1. Buka project Code.gs di script.google.com
@@ -958,6 +969,7 @@
                             assetData = resAset;
                             document.getElementById('loader').style.display = 'none';
                             populateFilters(); renderAll();
+                            applyEmbedModeIfNeeded();
                         })
                         .catch(err => {
                             document.getElementById('loader').style.display = 'none';
@@ -1621,6 +1633,31 @@
                 setTimeout(() => { window.print(); }, 500);
             }
         };
+
+        // Kalau dibuka lewat iframe Hub: sembunyiin sidebar & header mobile
+        // bawaan app ini (biar gak dobel sama header/menu Hub), lalu pindah
+        // ke tab yang diminta Hub (bukan selalu Dashboard). Dipanggil SETELAH
+        // data awal berhasil dimuat (initData), bukan pas load pertama --
+        // karena login-view masih perlu tampil normal kalau belum login.
+        const applyEmbedModeIfNeeded = () => {
+            if (!IS_EMBEDDED) return;
+            const sb = document.getElementById('sidebar');
+            const mh = document.getElementById('mobileHeader');
+            if (sb) sb.style.display = 'none';
+            if (mh) mh.style.display = 'none';
+            if (INITIAL_TAB !== 'dashboard') switchTab(INITIAL_TAB);
+        };
+
+        // Terima perintah pindah tab dari YASSA Hub lewat postMessage, dipakai
+        // SETELAH app ini kebuka & user login -- biar ganti menu gak perlu
+        // reload halaman dari nol. Cuma nerima dari origin Hub yang sah.
+        window.addEventListener('message', (e) => {
+            if (!ALLOWED_HUB_ORIGINS.includes(e.origin)) return;
+            const msg = e.data;
+            if (!msg || msg.type !== 'YASSA_HUB_NAVIGATE') return;
+            if (!sessionStorage.getItem('token')) return; // belum login, abaikan
+            if (VALID_TABS.includes(msg.tab)) switchTab(msg.tab);
+        });
 
         window.onload = initData;
     </script>
