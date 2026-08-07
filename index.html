@@ -391,7 +391,7 @@
                                 </div>
                             </div>
                         </div>
-                            <button onclick="cetakPDF()" class="bg-slate-800 text-white px-4 py-2 rounded-lg shadow flex items-center justify-center gap-2 hover:bg-slate-900 w-full md:w-auto">
+                            <button id="btn-cetak-buku" onclick="cetakPDF()" class="btn-cetak-role bg-slate-800 text-white px-4 py-2 rounded-lg shadow flex items-center justify-center gap-2 hover:bg-slate-900 w-full md:w-auto">
         <i class="fas fa-print"></i> Cetak PDF
     </button>
                         </div>
@@ -444,7 +444,7 @@
                             </div>
                         </div>
 
-                        <button onclick="cetakPDF()" class="bg-slate-800 text-white px-4 py-2 rounded-lg shadow flex items-center justify-center gap-2 hover:bg-slate-900 w-full md:w-auto">
+                        <button id="btn-cetak-lap" onclick="cetakPDF()" class="btn-cetak-role bg-slate-800 text-white px-4 py-2 rounded-lg shadow flex items-center justify-center gap-2 hover:bg-slate-900 w-full md:w-auto">
         <i class="fas fa-print"></i> Cetak Laporan
     </button>
                     </div>
@@ -540,7 +540,7 @@
                 <div id="aset-view" class="tab-content hidden flex-col h-full w-full">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 no-print gap-4">
                         <h2 class="text-2xl font-bold text-gray-800">Manajemen Aset & Lokasi</h2>
-                        <button onclick="openAddAssetModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 w-full sm:w-auto justify-center">
+                        <button id="btn-tambah-aset" onclick="openAddAssetModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 w-full sm:w-auto justify-center">
                             <i class="fas fa-plus"></i> Tambah Aset
                         </button>
                     </div>
@@ -878,7 +878,43 @@
             } catch (e) { console.error("Gagal memuat draft:", e.message); }
         };
 
+        // ================= ROLE ACCESS (superadmin & admin = edit+cetak, lainnya = lihat saja) =================
+        const EDITOR_ROLES = ['superadmin', 'admin'];
+        const isEditorRole = () => {
+            const r = (sessionStorage.getItem('role') || '').toString().trim().toLowerCase();
+            return EDITOR_ROLES.indexOf(r) !== -1;
+        };
+
+        // Menyembunyikan/mengunci elemen yang hanya boleh dipakai superadmin/admin.
+        // Dipanggil setiap kali data awal berhasil dimuat (initData -> getAppInitialData).
+        const applyRoleAccess = () => {
+            const editor = isEditorRole();
+
+            // Menu "Input Jurnal" di sidebar
+            const navInput = document.getElementById('nav-input');
+            if (navInput) navInput.style.display = editor ? '' : 'none';
+
+            // Tombol Cetak PDF (Buku Besar & Laporan ISAK 35)
+            document.querySelectorAll('.btn-cetak-role').forEach(btn => {
+                btn.style.display = editor ? '' : 'none';
+            });
+
+            // Tombol Tambah Aset
+            const btnTambahAset = document.getElementById('btn-tambah-aset');
+            if (btnTambahAset) btnTambahAset.style.display = editor ? '' : 'none';
+
+            // Kalau user view-only sedang berada di tab Input Jurnal (mis. lewat URL/embed), lempar ke Dashboard
+            if (!editor) {
+                const inputView = document.getElementById('input-view');
+                if (inputView && !inputView.classList.contains('hidden')) switchTab('dashboard');
+            }
+        };
+
         const switchTab = (name) => {
+            if (name === 'input' && !isEditorRole()) {
+                showCustomAlert('Akun Anda hanya memiliki izin melihat data (view only). Hubungi superadmin/admin untuk input transaksi.', 'error');
+                return;
+            }
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(`${name}-view`).classList.remove('hidden');
             
@@ -917,6 +953,7 @@
                 .then(res => {
                     if(res.success) {
                         sessionStorage.setItem('token', res.token);
+                        sessionStorage.setItem('role', res.role || '');
                         document.getElementById('login-view').classList.add('hidden');
                         initData();
                     } else {
@@ -963,6 +1000,8 @@
                 .then(res => {
                     if(res.unauthorized) return handleLogout();
                     G_COA = res.coa; G_LAPORAN = res.laporan; G_RIWAYAT = res.riwayat;
+                    if (typeof res.role !== 'undefined') sessionStorage.setItem('role', res.role || '');
+                    applyRoleAccess();
 
                     return callAPI('getAssets', { token })
                         .then(resAset => {
@@ -1184,6 +1223,7 @@
 
         const submitTransaction = (e) => {
             e.preventDefault();
+            if (!isEditorRole()) { showCustomAlert('Akun Anda hanya memiliki izin melihat data (view only).', 'error'); return; }
             if(isSaving) return;
             isSaving = true;
             
@@ -1365,6 +1405,7 @@
 
         const submitAddAsset = (e) => {
             e.preventDefault();
+            if (!isEditorRole()) { showCustomAlert('Akun Anda hanya memiliki izin melihat data (view only).', 'error'); return; }
             if(isSaving) return; isSaving = true;
             const btn = document.getElementById('btn-save-asset');
             btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Menyimpan...';
@@ -1583,6 +1624,10 @@
 
         // Trik memanipulasi URL Iframe agar nama PDF terbaca rapi dan otomatis menyimpan salinan ke Google Drive
         const cetakPDF = async () => {
+            if (!isEditorRole()) {
+                showCustomAlert('Akun Anda hanya memiliki izin melihat data (view only) dan tidak bisa mencetak.', 'error');
+                return;
+            }
             let judulLaporan = "Laporan_YASSA";
             
             // Cek apakah sedang buka tab Buku Besar atau ISAK 35
