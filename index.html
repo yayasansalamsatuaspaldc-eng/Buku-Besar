@@ -682,6 +682,9 @@
         const INITIAL_TAB = VALID_TABS.includes(EMBED_PARAMS.get('tab')) ? EMBED_PARAMS.get('tab') : 'dashboard';
         // Origin YASSA Hub yang boleh ngirim perintah pindah-tab lewat postMessage.
         const ALLOWED_HUB_ORIGINS = ['https://yayasansalamsatuaspaldc-eng.github.io'];
+        // Tiket sesi Hub (dititip Hub lewat ?hubToken=...) buat auto-login (SSO)
+        // tanpa user perlu ketik ulang username/password di sini.
+        const HUB_TOKEN = EMBED_PARAMS.get('hubToken');
 
         // =================================================================
         // KONFIGURASI KONEKSI KE BACKEND (GOOGLE APPS SCRIPT WEB APP)
@@ -1704,7 +1707,43 @@
             if (VALID_TABS.includes(msg.tab)) switchTab(msg.tab);
         });
 
-        window.onload = initData;
+        // =================================================================
+        // SSO DARI HUB: kalau app ini dibuka lewat iframe YASSA Hub (ada
+        // ?hubToken=...) dan belum ada sesi lokal, coba login otomatis dulu
+        // lewat backend (ssoLoginFromHub) sebelum nampilin form login manual.
+        // Kalau gagal (akun belum terdaftar di sheet Akun Buku Besar, dsb),
+        // baru jatuh ke login-view seperti biasa.
+        // =================================================================
+        const bootstrapAuth = () => {
+            if (sessionStorage.getItem('token')) { initData(); return; }
+
+            if (HUB_TOKEN) {
+                document.getElementById('loader').style.display = 'flex';
+                callAPI('ssoLoginFromHub', { hubToken: HUB_TOKEN })
+                    .then(res => {
+                        if (res.success) {
+                            sessionStorage.setItem('token', res.token);
+                            sessionStorage.setItem('role', res.role || '');
+                            document.getElementById('login-view').classList.add('hidden');
+                            initData();
+                        } else {
+                            document.getElementById('loader').style.display = 'none';
+                            document.getElementById('login-view').classList.remove('hidden');
+                            showCustomAlert(res.error || 'Gagal login otomatis dari Hub, silakan login manual.', 'error');
+                        }
+                    })
+                    .catch(err => {
+                        document.getElementById('loader').style.display = 'none';
+                        document.getElementById('login-view').classList.remove('hidden');
+                        showCustomAlert(err.message || 'Gagal menghubungi server saat SSO.', 'error');
+                    });
+                return;
+            }
+
+            initData(); // Tanpa hubToken -> jalur lama (initData munculin login-view kalau token kosong)
+        };
+
+        window.onload = bootstrapAuth;
     </script>
 </body>
 </html>
